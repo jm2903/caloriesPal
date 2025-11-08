@@ -76,6 +76,54 @@ st.markdown("""
     font-weight: 600;
 }
 .camera-close-btn:hover { background: #ff2e2e; }
+
+/* ---- REMOVE dark tab background & keep only red underline ---- */
+[data-baseweb="tab-list"] {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-bottom: none !important;
+}
+
+/* Make each tab transparent (no pill / dark bg) */
+[data-baseweb="tab"] {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 8px 18px !important;
+    margin: 0 4px !important;
+}
+
+/* Selected tab: no dark background, only red bottom border */
+[data-baseweb="tab"][aria-selected="true"] {
+    background: transparent !important;
+    color: #fff !important;
+    border-bottom: 3px solid #e74c3c !important; /* crvena linija */
+    box-shadow: none !important;
+}
+
+/* Hover / focus: show same red underline */
+[data-baseweb="tab"]:hover,
+[data-baseweb="tab"]:focus {
+    background: transparent !important;
+    color: #e74c3c !important;
+    border-bottom: 3px solid #e74c3c !important;
+}
+
+/* Remove any pseudo-element indicators that create a dark bar */
+[data-baseweb="tab"]::before,
+[data-baseweb="tab"]::after,
+[data-baseweb="tab-list"]::before,
+[data-baseweb="tab-list"]::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* If Streamlit injects wrappers, make sure their bg is transparent */
+[data-testid="stTabs"] div[role="tablist"],
+div[role="tablist"] {
+    background: transparent !important;
+    box-shadow: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
