@@ -3,7 +3,6 @@
 
 import streamlit as st
 from datetime import date, timedelta
-import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from funkcionalnosti import (
@@ -13,18 +12,68 @@ from funkcionalnosti import (
 )
 
 # ---------------------------------------------------------------------
-st.set_page_config(page_title="Nutri Tracker", page_icon="🥗", layout="wide")
+st.set_page_config(page_title="CaloriesPal", page_icon="🥗", layout="wide")
 
-st.sidebar.title("🥗 Nutri Tracker")
+# ---------- GLOBAL STANJE ----------
+if "camera_open" not in st.session_state:
+    st.session_state["camera_open"] = False
+if "last_barcode" not in st.session_state:
+    st.session_state["last_barcode"] = None
+if "last_product" not in st.session_state:
+    st.session_state["last_product"] = None
+
+# ---------- STIL (cards + fullscreen kamera) ----------
+st.markdown("""
+<style>
+/* Tamna pozadina */
+[data-testid="stAppViewContainer"] { background-color: #0e1117; }
+[data-testid="stHeader"] { background: transparent; }
+/* Kartice */
+.card {
+    background: #1e222a;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.05);
+}
+.card h3, .card h2, .card h4 { margin-top: 0; color: #f1f5f9; }
+/* Fullscreen kamera overlay */
+.camera-overlay {
+    position: fixed !important;
+    inset: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0,0,0,0.95);
+    z-index: 9999;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px;
+}
+.camera-panel {
+    width: min(100%, 1100px);
+}
+.camera-actions {
+    position: fixed; top: 18px; right: 18px; z-index: 10000;
+}
+.camera-close-btn {
+    background: #ff4b4b; color: #fff; border: none;
+    border-radius: 12px; padding: 10px 16px; cursor: pointer;
+    font-weight: 600;
+}
+.camera-close-btn:hover { background: #ff2e2e; }
+</style>
+""", unsafe_allow_html=True)
+
+# ---------- SIDEBAR ----------
+st.sidebar.title("🥗 CaloriesPal")
 page = st.sidebar.radio(
     "Navigacija",
     ["Dnevnik", "Dodaj (barkod/kamera)", "Dodaj (ručno)", "Statistika", "Profil", "Težina"],
     index=0
 )
-
 selected_date = st.sidebar.date_input("Datum", value=date.today())
 
-# ---------------------------------------------------------------------
+# ---------- POMOĆNE FUNKCIJE ----------
 def ring_chart(current, target, label):
     if target is None or target <= 0:
         target = 1
@@ -39,42 +88,70 @@ def ring_chart(current, target, label):
         showlegend=False,
         margin=dict(l=0, r=0, t=0, b=0),
         annotations=[
-            dict(
-                text=f"{int(current)}/{int(target)}",
-                x=0.5,
-                y=0.5,
-                font_size=16,
-                showarrow=False
-            )
+            dict(text=f"{int(current)}/{int(target)}", x=0.5, y=0.5, font_size=16, showarrow=False)
         ]
     )
     return fig
 
-
 def show_day_rings(totals, profile):
-    cols = st.columns(4)
-    with cols[0]:
-        st.subheader("Kalorije")
-        st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True)
-    with cols[1]:
-        st.subheader("Proteini (g)")
-        st.plotly_chart(ring_chart(totals.get("protein", 0), profile.get("target_protein", 100), "g"), use_container_width=True)
-    with cols[2]:
-        st.subheader("Ugljikohidrati (g)")
-        st.plotly_chart(ring_chart(totals.get("carbs", 0), profile.get("target_carbs", 250), "g"), use_container_width=True)
-    with cols[3]:
-        st.subheader("Masti (g)")
-        st.plotly_chart(ring_chart(totals.get("fat", 0), profile.get("target_fat", 70), "g"), use_container_width=True)
+    with st.container():
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        cols = st.columns(4)
+        with cols[0]:
+            st.subheader("Kalorije")
+            st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True)
+        with cols[1]:
+            st.subheader("Proteini (g)")
+            st.plotly_chart(ring_chart(totals.get("protein", 0), profile.get("target_protein", 100), "g"), use_container_width=True)
+        with cols[2]:
+            st.subheader("Ugljikohidrati (g)")
+            st.plotly_chart(ring_chart(totals.get("carbs", 0), profile.get("target_carbs", 250), "g"), use_container_width=True)
+        with cols[3]:
+            st.subheader("Masti (g)")
+            st.plotly_chart(ring_chart(totals.get("fat", 0), profile.get("target_fat", 70), "g"), use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------
+def open_camera():
+    st.session_state["camera_open"] = True
+
+def close_camera():
+    st.session_state["camera_open"] = False
+
+def camera_overlay():
+    """Fullscreen kamera. Kad prikupi barkod, sprema u session_state['last_barcode'] i zatvara overlay."""
+    st.markdown('<div class="camera-overlay">', unsafe_allow_html=True)
+    st.markdown('<div class="camera-actions"><button class="camera-close-btn" onclick="window.parent.location.reload()">Zatvori</button></div>', unsafe_allow_html=True)
+    st.markdown('<div class="camera-panel">', unsafe_allow_html=True)
+
+    img = st.camera_input("Slikaj barkod", key="camera_fullscreen")
+    if img is not None:
+        image_bytes = img.getvalue()
+        code = decode_barcode_from_image(image_bytes)
+        if code:
+            st.session_state["last_barcode"] = code
+            st.success(f"✅ Barkod: **{code}**")
+            # automatski zatvori overlay nakon uspjeha
+            close_camera()
+            st.experimental_rerun()
+        else:
+            st.warning("❌ Nije moguće prepoznati barkod sa slike. Pokušaj ponovno.")
+
+    st.markdown('</div>', unsafe_allow_html=True)  # camera-panel
+    st.markdown('</div>', unsafe_allow_html=True)  # camera-overlay
+
+# ---------- PODACI PROFILA ----------
 profile = read_profile()
 
-# ----------------------------- STRANICE -------------------------------
+# ============================= STRANICE =============================
+
 if page == "Dnevnik":
     st.title("📒 Dnevnik unosa")
+
     totals = daily_totals(selected_date)
     show_day_rings(totals, profile)
-    st.markdown("### Unosi za dan")
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("Unosi za dan")
     df = list_entries(selected_date)
     if df.empty:
         st.info("Nema unosa za odabrani dan.")
@@ -88,29 +165,30 @@ if page == "Dnevnik":
         if del_id and st.button("Obriši odabrani unos", type="primary"):
             delete_entry(str(del_id))
             st.success("Unos obrisan! Osvježi prikaz promjenom datuma.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
 elif page == "Dodaj (barkod/kamera)":
     st.title("📷 Dodaj putem barkoda")
-    st.caption("Možeš koristiti kameru (desktop/mobitel) ili ručni unos barkoda.")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        uploaded = st.camera_input("Slikaj barkod")
-        barcode_cam = None
-        if uploaded is not None:
-            bytes_data = uploaded.getvalue()
-            code = decode_barcode_from_image(bytes_data)
-            if code:
-                st.success(f"Pronađen barkod: **{code}**")
-                barcode_cam = code
-            else:
-                st.warning("Nije moguće prepoznati barkod sa slike. Pokušaj ponovno ili unesi ručno.")
+    # Fullscreen kamera overlay (po potrebi)
+    if st.session_state["camera_open"]:
+        camera_overlay()
 
-    with col2:
-        barcode_manual = st.text_input("Ili upiši barkod ručno (EAN/UPC)")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        st.caption("Skeniraj barkod kamerom (fullscreen) ili upiši barkod ručno.")
+        st.button("📸 Pokreni kameru (fullscreen)", on_click=open_camera, type="primary")
 
-    barcode = barcode_cam or barcode_manual
+    with c2:
+        barcode_manual = st.text_input("Ručni unos barkoda (EAN/UPC)", value="" if st.session_state["last_barcode"] is None else st.session_state["last_barcode"])
+
+    barcode = (st.session_state["last_barcode"] or "").strip() or barcode_manual.strip()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     if barcode:
         if st.button("Dohvati podatke s OpenFoodFacts"):
             p = fetch_openfoodfacts(barcode)
@@ -124,11 +202,18 @@ elif page == "Dodaj (barkod/kamera)":
                 item_name = st.text_input("Naziv unosa", value=p.name)
                 if st.button("Dodaj u dnevnik"):
                     add_entry(item_name=item_name, qty_g=qty, nutr=p.nutriments, barcode=barcode, raw_json=p.__dict__)
+                    st.session_state["last_product"] = p.name
+                    st.session_state["last_barcode"] = None
                     st.success("Dodano u dnevnik!")
+    else:
+        st.info("Unesi barkod ili pokreni kameru.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
 elif page == "Dodaj (ručno)":
     st.title("✍️ Ručni unos")
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     with st.form("manual_add"):
         item_name = st.text_input("Naziv unosa", value="Hrana/piće")
         qty = st.number_input("Količina (g/ml)", min_value=0.0, value=100.0, step=10.0)
@@ -149,19 +234,19 @@ elif page == "Dodaj (ručno)":
                     "sugars_g": sugars, "fiber_g": fiber, "salt_g": salt}
             add_entry(item_name=item_name, qty_g=qty, nutr=nutr, barcode=None, raw_json=None)
             st.success("Dodano!")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
 elif page == "Statistika":
     st.title("📊 Statistika")
+
     totals = daily_totals(selected_date)
-    st.subheader(f"Pregled za {selected_date.isoformat()}")
     show_day_rings(totals, profile)
 
-    st.markdown("---")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Po danima (raspon)")
     start = st.date_input("Od", value=date.today() - timedelta(days=14))
     end = st.date_input("Do", value=date.today())
-
     if start > end:
         st.warning("Početni datum mora biti prije završnog.")
     else:
@@ -179,10 +264,13 @@ elif page == "Statistika":
                 st.plotly_chart(px.line(df, x="entry_date", y="carbs", markers=True), use_container_width=True)
             with tabs[3]:
                 st.plotly_chart(px.line(df, x="entry_date", y="fat", markers=True), use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
 elif page == "Profil":
     st.title("👤 Profil i ciljevi")
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     with st.form("profile_form"):
         name = st.text_input("Ime", value=profile.get("name", "Korisnik"))
         c1, c2, c3 = st.columns(3)
@@ -214,10 +302,13 @@ elif page == "Profil":
                 "weight_kg": weight_kg,
             })
             st.success("Profil ažuriran!")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
 elif page == "Težina":
     st.title("⚖️ Praćenje težine")
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     w = st.number_input("Unesi trenutnu težinu (kg)", min_value=0.0, value=0.0, step=0.1)
     if st.button("Dodaj težinu"):
         if w > 0:
@@ -225,13 +316,16 @@ elif page == "Težina":
             st.success("Dodano!")
         else:
             st.warning("Upiši vrijednost veću od 0.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
+    st.markdown('<div class="card">', unsafe_allow_html=True)
     dfw = get_weight_history()
     if dfw.empty:
         st.info("Još nema zapisa o težini.")
     else:
         st.dataframe(dfw, use_container_width=True)
         st.plotly_chart(px.line(dfw, x="weight_date", y="weight_kg", markers=True), use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
-st.caption("© Nutri Tracker — privatna aplikacija za praćenje prehrane i težine.")
+st.caption("© CaloriesPal — privatna aplikacija za praćenje prehrane i težine.")
