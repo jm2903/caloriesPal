@@ -103,16 +103,17 @@ def show_day_rings(totals, profile):
     cols = st.columns(4)
     with cols[0]:
         st.subheader("Kalorije")
-        st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True)
+        st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"),
+                        use_container_width=True, key="ring_kcal")
     with cols[1]:
         st.subheader("Proteini (g)")
-        st.plotly_chart(ring_chart(totals.get("protein", 0), profile.get("target_protein", 100), "g"), use_container_width=True)
+        st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True, key="ring_kcal")
     with cols[2]:
         st.subheader("Ugljikohidrati (g)")
-        st.plotly_chart(ring_chart(totals.get("carbs", 0), profile.get("target_carbs", 250), "g"), use_container_width=True)
+        st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True, key="ring_kcal")
     with cols[3]:
         st.subheader("Masti (g)")
-        st.plotly_chart(ring_chart(totals.get("fat", 0), profile.get("target_fat", 70), "g"), use_container_width=True)
+        st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True, key="ring_kcal")
     st.markdown('</div>', unsafe_allow_html=True)
 
 def camera_overlay():
