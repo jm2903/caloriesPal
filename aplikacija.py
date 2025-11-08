@@ -1,5 +1,6 @@
 # aplikacija.py
-# Streamlit UI za Nutri Tracker aplikaciju (Supabase backend)
+# CaloriesPal — Streamlit UI bez sidebara (kartice / tabovi)
+# Povezano sa Supabase backendom
 
 import streamlit as st
 from datetime import date, timedelta
@@ -14,7 +15,7 @@ from funkcionalnosti import (
 # ---------------------------------------------------------------------
 st.set_page_config(page_title="CaloriesPal", page_icon="🥗", layout="wide")
 
-# ---------- GLOBAL STANJE ----------
+# -------------------- Globalno stanje --------------------
 if "camera_open" not in st.session_state:
     st.session_state["camera_open"] = False
 if "last_barcode" not in st.session_state:
@@ -22,38 +23,52 @@ if "last_barcode" not in st.session_state:
 if "last_product" not in st.session_state:
     st.session_state["last_product"] = None
 
-# ---------- STIL (cards + fullscreen kamera) ----------
+# -------------------- CSS --------------------
 st.markdown("""
 <style>
-/* Tamna pozadina */
-[data-testid="stAppViewContainer"] { background-color: #0e1117; }
+[data-testid="stAppViewContainer"] { background-color: #0e1117; color: #fff; }
 [data-testid="stHeader"] { background: transparent; }
-/* Kartice */
+
 .card {
     background: #1e222a;
-    border-radius: 20px;
-    padding: 24px;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.35);
-    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 18px;
+    padding: 25px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
 }
-.card h3, .card h2, .card h4 { margin-top: 0; color: #f1f5f9; }
+.card h2, .card h3 { color: #f1f5f9; margin-top: 0; }
+
+/* Tabs stil */
+[data-baseweb="tab-list"] {
+    justify-content: center;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+[data-baseweb="tab"] {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ddd;
+}
+[data-baseweb="tab"]:hover {
+    color: white;
+}
+[data-baseweb="tab"][aria-selected="true"] {
+    color: #fff !important;
+    border-bottom: 3px solid #42b883;
+}
+
 /* Fullscreen kamera overlay */
 .camera-overlay {
     position: fixed !important;
     inset: 0;
     width: 100vw; height: 100vh;
-    background: rgba(0,0,0,0.95);
+    background: rgba(0,0,0,0.96);
     z-index: 9999;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     padding: 24px;
 }
-.camera-panel {
-    width: min(100%, 1100px);
-}
 .camera-actions {
-    position: fixed; top: 18px; right: 18px; z-index: 10000;
+    position: fixed; top: 20px; right: 25px; z-index: 10000;
 }
 .camera-close-btn {
     background: #ff4b4b; color: #fff; border: none;
@@ -64,16 +79,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- SIDEBAR ----------
-st.sidebar.title("🥗 CaloriesPal")
-page = st.sidebar.radio(
-    "Navigacija",
-    ["Dnevnik", "Dodaj (barkod/kamera)", "Dodaj (ručno)", "Statistika", "Profil", "Težina"],
-    index=0
-)
-selected_date = st.sidebar.date_input("Datum", value=date.today())
-
-# ---------- POMOĆNE FUNKCIJE ----------
+# -------------------- Pomoćne funkcije --------------------
 def ring_chart(current, target, label):
     if target is None or target <= 0:
         target = 1
@@ -84,69 +90,59 @@ def ring_chart(current, target, label):
         hole=0.7,
         sort=False
     )])
-    fig.update_layout(
-        showlegend=False,
-        margin=dict(l=0, r=0, t=0, b=0),
-        annotations=[
-            dict(text=f"{int(current)}/{int(target)}", x=0.5, y=0.5, font_size=16, showarrow=False)
-        ]
+    fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=0, b=0))
+    fig.update_traces(textinfo="none")
+    fig.add_annotation(
+        text=f"{int(current)}/{int(target)}",
+        x=0.5, y=0.5, showarrow=False, font_size=16, font_color="white"
     )
     return fig
 
 def show_day_rings(totals, profile):
-    with st.container():
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        cols = st.columns(4)
-        with cols[0]:
-            st.subheader("Kalorije")
-            st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True)
-        with cols[1]:
-            st.subheader("Proteini (g)")
-            st.plotly_chart(ring_chart(totals.get("protein", 0), profile.get("target_protein", 100), "g"), use_container_width=True)
-        with cols[2]:
-            st.subheader("Ugljikohidrati (g)")
-            st.plotly_chart(ring_chart(totals.get("carbs", 0), profile.get("target_carbs", 250), "g"), use_container_width=True)
-        with cols[3]:
-            st.subheader("Masti (g)")
-            st.plotly_chart(ring_chart(totals.get("fat", 0), profile.get("target_fat", 70), "g"), use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-def open_camera():
-    st.session_state["camera_open"] = True
-
-def close_camera():
-    st.session_state["camera_open"] = False
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    cols = st.columns(4)
+    with cols[0]:
+        st.subheader("Kalorije")
+        st.plotly_chart(ring_chart(totals.get("kcal", 0), profile.get("target_kcal", 2000), "kcal"), use_container_width=True)
+    with cols[1]:
+        st.subheader("Proteini (g)")
+        st.plotly_chart(ring_chart(totals.get("protein", 0), profile.get("target_protein", 100), "g"), use_container_width=True)
+    with cols[2]:
+        st.subheader("Ugljikohidrati (g)")
+        st.plotly_chart(ring_chart(totals.get("carbs", 0), profile.get("target_carbs", 250), "g"), use_container_width=True)
+    with cols[3]:
+        st.subheader("Masti (g)")
+        st.plotly_chart(ring_chart(totals.get("fat", 0), profile.get("target_fat", 70), "g"), use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def camera_overlay():
-    """Fullscreen kamera. Kad prikupi barkod, sprema u session_state['last_barcode'] i zatvara overlay."""
+    """Fullscreen kamera overlay"""
     st.markdown('<div class="camera-overlay">', unsafe_allow_html=True)
     st.markdown('<div class="camera-actions"><button class="camera-close-btn" onclick="window.parent.location.reload()">Zatvori</button></div>', unsafe_allow_html=True)
-    st.markdown('<div class="camera-panel">', unsafe_allow_html=True)
-
-    img = st.camera_input("Slikaj barkod", key="camera_fullscreen")
+    img = st.camera_input("📷 Slikaj barkod", key="camera_fullscreen")
     if img is not None:
         image_bytes = img.getvalue()
         code = decode_barcode_from_image(image_bytes)
         if code:
             st.session_state["last_barcode"] = code
-            st.success(f"✅ Barkod: **{code}**")
-            # automatski zatvori overlay nakon uspjeha
-            close_camera()
+            st.session_state["camera_open"] = False
+            st.success(f"✅ Barkod: {code}")
             st.experimental_rerun()
         else:
-            st.warning("❌ Nije moguće prepoznati barkod sa slike. Pokušaj ponovno.")
+            st.warning("❌ Barkod nije prepoznat. Pokušaj ponovno.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)  # camera-panel
-    st.markdown('</div>', unsafe_allow_html=True)  # camera-overlay
-
-# ---------- PODACI PROFILA ----------
+# -------------------- Profil --------------------
 profile = read_profile()
+today = date.today()
 
-# ============================= STRANICE =============================
+# -------------------- Gornji Tabs --------------------
+tabs = st.tabs(["📒 Dnevnik", "📷 Barkod / Kamera", "✍️ Ručni unos", "📊 Statistika", "👤 Profil", "⚖️ Težina"])
 
-if page == "Dnevnik":
-    st.title("📒 Dnevnik unosa")
-
+# -------------------- Dnevnik --------------------
+with tabs[0]:
+    st.header("📒 Dnevnik unosa")
+    selected_date = st.date_input("Datum", value=today)
     totals = daily_totals(selected_date)
     show_day_rings(totals, profile)
 
@@ -156,39 +152,29 @@ if page == "Dnevnik":
     if df.empty:
         st.info("Nema unosa za odabrani dan.")
     else:
-        st.dataframe(
-            df[["id", "created_at", "item_name", "qty_g", "kcal", "protein", "carbs", "fat", "sugars", "fiber", "salt"]],
-            use_container_width=True
-        )
+        st.dataframe(df, use_container_width=True)
         ids = df["id"].tolist()
         del_id = st.selectbox("Odaberi unos za brisanje", options=[None] + ids, format_func=lambda x: "—" if x is None else f"#{x}")
         if del_id and st.button("Obriši odabrani unos", type="primary"):
             delete_entry(str(del_id))
-            st.success("Unos obrisan! Osvježi prikaz promjenom datuma.")
+            st.success("Unos obrisan!")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------
-elif page == "Dodaj (barkod/kamera)":
-    st.title("📷 Dodaj putem barkoda")
+# -------------------- Barkod / Kamera --------------------
+with tabs[1]:
+    st.header("📷 Dodaj putem barkoda")
 
-    # Fullscreen kamera overlay (po potrebi)
     if st.session_state["camera_open"]:
         camera_overlay()
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    c1, c2 = st.columns([1, 1])
+    c1, c2 = st.columns(2)
     with c1:
-        st.caption("Skeniraj barkod kamerom (fullscreen) ili upiši barkod ručno.")
-        st.button("📸 Pokreni kameru (fullscreen)", on_click=open_camera, type="primary")
-
+        st.button("📸 Pokreni kameru (fullscreen)", on_click=lambda: st.session_state.update({"camera_open": True}), type="primary")
     with c2:
-        barcode_manual = st.text_input("Ručni unos barkoda (EAN/UPC)", value="" if st.session_state["last_barcode"] is None else st.session_state["last_barcode"])
+        barcode_manual = st.text_input("Ili unesi barkod ručno", value=st.session_state["last_barcode"] or "")
+    barcode = barcode_manual.strip() or st.session_state["last_barcode"]
 
-    barcode = (st.session_state["last_barcode"] or "").strip() or barcode_manual.strip()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     if barcode:
         if st.button("Dohvati podatke s OpenFoodFacts"):
             p = fetch_openfoodfacts(barcode)
@@ -196,124 +182,101 @@ elif page == "Dodaj (barkod/kamera)":
                 st.error("Proizvod nije pronađen.")
             else:
                 st.success(f"Nađen: {p.name} ({p.brand or 'N/A'})")
-                st.write("Nutritivne vrijednosti (na 100 g/ml):")
                 st.json(p.nutriments)
                 qty = st.number_input("Količina (g/ml)", min_value=0.0, value=100.0, step=10.0)
-                item_name = st.text_input("Naziv unosa", value=p.name)
                 if st.button("Dodaj u dnevnik"):
-                    add_entry(item_name=item_name, qty_g=qty, nutr=p.nutriments, barcode=barcode, raw_json=p.__dict__)
-                    st.session_state["last_product"] = p.name
+                    add_entry(item_name=p.name, qty_g=qty, nutr=p.nutriments, barcode=barcode, raw_json=p.__dict__)
+                    st.success("✅ Dodano u dnevnik!")
                     st.session_state["last_barcode"] = None
-                    st.success("Dodano u dnevnik!")
     else:
-        st.info("Unesi barkod ili pokreni kameru.")
+        st.info("📱 Pokreni kameru ili unesi barkod ručno.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------
-elif page == "Dodaj (ručno)":
-    st.title("✍️ Ručni unos")
-
+# -------------------- Ručni unos --------------------
+with tabs[2]:
+    st.header("✍️ Ručni unos")
     st.markdown('<div class="card">', unsafe_allow_html=True)
     with st.form("manual_add"):
         item_name = st.text_input("Naziv unosa", value="Hrana/piće")
         qty = st.number_input("Količina (g/ml)", min_value=0.0, value=100.0, step=10.0)
         c1, c2, c3 = st.columns(3)
         with c1:
-            kcal = st.number_input("kcal / 100g", min_value=0.0, value=100.0, step=1.0)
-            protein = st.number_input("Proteini g / 100g", min_value=0.0, value=5.0, step=0.5)
+            kcal = st.number_input("kcal / 100g", value=100.0)
+            protein = st.number_input("Proteini g / 100g", value=5.0)
         with c2:
-            carbs = st.number_input("Ugljikohidrati g / 100g", min_value=0.0, value=10.0, step=0.5)
-            fat = st.number_input("Masti g / 100g", min_value=0.0, value=3.0, step=0.5)
+            carbs = st.number_input("Ugljikohidrati g / 100g", value=10.0)
+            fat = st.number_input("Masti g / 100g", value=3.0)
         with c3:
-            sugars = st.number_input("Šećeri g / 100g", min_value=0.0, value=5.0, step=0.5)
-            fiber = st.number_input("Vlakna g / 100g", min_value=0.0, value=2.0, step=0.5)
-        salt = st.number_input("Sol g / 100g", min_value=0.0, value=0.5, step=0.1)
+            sugars = st.number_input("Šećeri g / 100g", value=5.0)
+            fiber = st.number_input("Vlakna g / 100g", value=2.0)
+        salt = st.number_input("Sol g / 100g", value=0.5)
         submitted = st.form_submit_button("Dodaj u dnevnik")
         if submitted:
             nutr = {"kcal": kcal, "protein_g": protein, "carbs_g": carbs, "fat_g": fat,
                     "sugars_g": sugars, "fiber_g": fiber, "salt_g": salt}
             add_entry(item_name=item_name, qty_g=qty, nutr=nutr, barcode=None, raw_json=None)
-            st.success("Dodano!")
+            st.success("✅ Dodano!")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------
-elif page == "Statistika":
-    st.title("📊 Statistika")
-
+# -------------------- Statistika --------------------
+with tabs[3]:
+    st.header("📊 Statistika")
+    selected_date = st.date_input("Datum", value=today, key="stats_date")
     totals = daily_totals(selected_date)
     show_day_rings(totals, profile)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("Po danima (raspon)")
-    start = st.date_input("Od", value=date.today() - timedelta(days=14))
-    end = st.date_input("Do", value=date.today())
-    if start > end:
-        st.warning("Početni datum mora biti prije završnog.")
-    else:
+    start = st.date_input("Od", value=today - timedelta(days=14))
+    end = st.date_input("Do", value=today)
+    if start <= end:
         df = range_stats(start, end)
         if df.empty:
-            st.info("Nema podataka u odabranom rasponu.")
+            st.info("Nema podataka u rasponu.")
         else:
             st.dataframe(df, use_container_width=True)
-            tabs = st.tabs(["Kalorije", "Proteini", "Ugljikohidrati", "Masti"])
-            with tabs[0]:
-                st.plotly_chart(px.line(df, x="entry_date", y="kcal", markers=True), use_container_width=True)
-            with tabs[1]:
-                st.plotly_chart(px.line(df, x="entry_date", y="protein", markers=True), use_container_width=True)
-            with tabs[2]:
-                st.plotly_chart(px.line(df, x="entry_date", y="carbs", markers=True), use_container_width=True)
-            with tabs[3]:
-                st.plotly_chart(px.line(df, x="entry_date", y="fat", markers=True), use_container_width=True)
+            st.plotly_chart(px.line(df, x="entry_date", y="kcal", title="Dnevne kalorije"), use_container_width=True)
+    else:
+        st.warning("Pogrešan raspon datuma.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------
-elif page == "Profil":
-    st.title("👤 Profil i ciljevi")
-
+# -------------------- Profil --------------------
+with tabs[4]:
+    st.header("👤 Profil i ciljevi")
     st.markdown('<div class="card">', unsafe_allow_html=True)
     with st.form("profile_form"):
         name = st.text_input("Ime", value=profile.get("name", "Korisnik"))
         c1, c2, c3 = st.columns(3)
         with c1:
-            target_kcal = st.number_input("Cilj kalorija (kcal/dan)", min_value=500.0, value=float(profile.get("target_kcal", 2000)))
-            target_protein = st.number_input("Cilj proteina (g/dan)", min_value=0.0, value=float(profile.get("target_protein", 100)))
-            height_cm = st.number_input("Visina (cm)", min_value=0.0, value=float(profile.get("height_cm") or 0.0))
+            target_kcal = st.number_input("Cilj kalorija (kcal)", value=float(profile.get("target_kcal", 2000)))
+            target_protein = st.number_input("Cilj proteina (g)", value=float(profile.get("target_protein", 100)))
         with c2:
-            target_carbs = st.number_input("Cilj ugljikohidrata (g/dan)", min_value=0.0, value=float(profile.get("target_carbs", 250)))
-            target_fat = st.number_input("Cilj masti (g/dan)", min_value=0.0, value=float(profile.get("target_fat", 70)))
-            weight_kg = st.number_input("Težina (kg)", min_value=0.0, value=float(profile.get("weight_kg") or 0.0))
+            target_carbs = st.number_input("Cilj ugljikohidrata (g)", value=float(profile.get("target_carbs", 250)))
+            target_fat = st.number_input("Cilj masti (g)", value=float(profile.get("target_fat", 70)))
         with c3:
-            target_fiber = st.number_input("Cilj vlakana (g/dan)", min_value=0.0, value=float(profile.get("target_fiber", 30)))
-            target_sugars = st.number_input("Cilj šećera (g/dan)", min_value=0.0, value=float(profile.get("target_sugars", 50)))
-            target_salt = st.number_input("Cilj soli (g/dan)", min_value=0.0, value=float(profile.get("target_salt", 5)))
-
-        submitted = st.form_submit_button("Spremi profil")
-        if submitted:
+            target_sugars = st.number_input("Cilj šećera (g)", value=float(profile.get("target_sugars", 50)))
+            target_salt = st.number_input("Cilj soli (g)", value=float(profile.get("target_salt", 5)))
+        if st.form_submit_button("Spremi"):
             update_profile({
                 "name": name,
                 "target_kcal": target_kcal,
                 "target_protein": target_protein,
                 "target_carbs": target_carbs,
                 "target_fat": target_fat,
-                "target_fiber": target_fiber,
                 "target_sugars": target_sugars,
                 "target_salt": target_salt,
-                "height_cm": height_cm,
-                "weight_kg": weight_kg,
             })
-            st.success("Profil ažuriran!")
+            st.success("✅ Profil ažuriran.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------
-elif page == "Težina":
-    st.title("⚖️ Praćenje težine")
-
+# -------------------- Težina --------------------
+with tabs[5]:
+    st.header("⚖️ Praćenje težine")
     st.markdown('<div class="card">', unsafe_allow_html=True)
     w = st.number_input("Unesi trenutnu težinu (kg)", min_value=0.0, value=0.0, step=0.1)
     if st.button("Dodaj težinu"):
         if w > 0:
             add_weight_entry(w)
-            st.success("Dodano!")
+            st.success("✅ Dodano!")
         else:
             st.warning("Upiši vrijednost veću od 0.")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -321,11 +284,10 @@ elif page == "Težina":
     st.markdown('<div class="card">', unsafe_allow_html=True)
     dfw = get_weight_history()
     if dfw.empty:
-        st.info("Još nema zapisa o težini.")
+        st.info("Još nema zapisa.")
     else:
-        st.dataframe(dfw, use_container_width=True)
-        st.plotly_chart(px.line(dfw, x="weight_date", y="weight_kg", markers=True), use_container_width=True)
+        st.plotly_chart(px.line(dfw, x="weight_date", y="weight_kg", markers=True, title="Promjena težine"), use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------------------------------------------------------------
-st.caption("© CaloriesPal — privatna aplikacija za praćenje prehrane i težine.")
+# -------------------- Footer --------------------
+st.caption("© 2025 CaloriesPal — minimalistička aplikacija za praćenje prehrane i težine.")
