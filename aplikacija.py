@@ -90,7 +90,7 @@ def camera_overlay():
             st.session_state["last_barcode"] = code
             st.session_state["camera_open"] = False
             st.success(f"✅ Barkod: {code}")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.warning("❌ Barkod nije prepoznat. Pokušaj ponovno.")
     st.markdown('</div>', unsafe_allow_html=True)
