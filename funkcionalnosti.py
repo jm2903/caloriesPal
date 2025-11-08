@@ -1,5 +1,5 @@
 # funkcionalnosti.py
-# Supabase integracija za Nutri Tracker aplikaciju
+# Supabase integracija za CaloriesPal (Nutri Tracker)
 
 import os
 from datetime import datetime, date
@@ -8,11 +8,11 @@ import pandas as pd
 import requests
 from dataclasses import dataclass
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageEnhance
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-# Barkod skeniranje
+# Barkod dekodiranje
 try:
     from pyzbar.pyzbar import decode as zbar_decode
 except Exception:
@@ -20,7 +20,6 @@ except Exception:
 
 # ---------------------- KONFIGURACIJA SUPABASE ----------------------
 load_dotenv()
-
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
@@ -50,10 +49,9 @@ class ProductInfo:
 
 # ---------------------- PROFIL ----------------------
 def read_profile() -> Dict:
-    res = supabase.table("profile").select("*").execute()
+    res = supabase.from_("profile").select("*").execute()
     if not res.data:
-        # ako nema profila, kreiraj default
-        supabase.table("profile").insert({
+        supabase.from_("profile").insert({
             "name": "Korisnik",
             "target_kcal": 2000,
             "target_protein": 100,
@@ -66,11 +64,11 @@ def read_profile() -> Dict:
 
 
 def update_profile(data: Dict):
-    profiles = supabase.table("profile").select("id").execute()
+    profiles = supabase.from_("profile").select("id").execute()
     if not profiles.data:
         return
     profile_id = profiles.data[0]["id"]
-    supabase.table("profile").update(data).eq("id", profile_id).execute()
+    supabase.from_("profile").update(data).eq("id", profile_id).execute()
 
 
 # ---------------------- ENTRIES ----------------------
@@ -88,7 +86,7 @@ def add_entry(item_name: str, qty_g: float, nutr: Dict[str, float],
     fiber = float(nutr.get("fiber_g", 0)) * factor
     salt = float(nutr.get("salt_g", 0)) * factor
 
-    supabase.table("entries").insert({
+    supabase.from_("entries").insert({
         "entry_date": when.isoformat(),
         "item_name": item_name,
         "barcode": barcode,
@@ -105,24 +103,25 @@ def add_entry(item_name: str, qty_g: float, nutr: Dict[str, float],
 
 
 def list_entries(for_date: Optional[date] = None) -> pd.DataFrame:
-    query = supabase.table("entries").select("*").order("created_at", desc=True)
+    query = supabase.from_("entries").select("*").order("created_at", desc=True)
     if for_date:
         query = query.eq("entry_date", for_date.isoformat())
     res = query.execute()
-    df = pd.DataFrame(res.data)
+    df = pd.DataFrame(res.data or [])
     if not df.empty:
         df["created_at"] = pd.to_datetime(df["created_at"])
     return df
 
 
 def delete_entry(entry_id: str):
-    supabase.table("entries").delete().eq("id", entry_id).execute()
+    supabase.from_("entries").delete().eq("id", entry_id).execute()
 
 
 def daily_totals(for_date: Optional[date] = None) -> Dict[str, float]:
     if for_date is None:
         for_date = date.today()
-    res = supabase.table("entries").select("kcal, protein, carbs, fat, sugars, fiber, salt") \
+    res = supabase.from_("entries") \
+        .select("kcal, protein, carbs, fat, sugars, fiber, salt") \
         .eq("entry_date", for_date.isoformat()).execute()
     if not res.data:
         return {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "sugars": 0, "fiber": 0, "salt": 0}
@@ -131,9 +130,11 @@ def daily_totals(for_date: Optional[date] = None) -> Dict[str, float]:
 
 
 def range_stats(start: date, end: date) -> pd.DataFrame:
-    res = supabase.table("entries").select("entry_date, kcal, protein, carbs, fat, sugars, fiber, salt") \
-        .gte("entry_date", start.isoformat()).lte("entry_date", end.isoformat()).execute()
-    df = pd.DataFrame(res.data)
+    res = supabase.from_("entries") \
+        .select("entry_date, kcal, protein, carbs, fat, sugars, fiber, salt") \
+        .gte("entry_date", start.isoformat()) \
+        .lte("entry_date", end.isoformat()).execute()
+    df = pd.DataFrame(res.data or [])
     if df.empty:
         return pd.DataFrame()
     grouped = df.groupby("entry_date").sum(numeric_only=True).reset_index()
@@ -145,15 +146,15 @@ def range_stats(start: date, end: date) -> pd.DataFrame:
 def add_weight_entry(weight_kg: float, when: Optional[date] = None):
     if when is None:
         when = date.today()
-    supabase.table("weights").insert({
+    supabase.from_("weights").insert({
         "weight_date": when.isoformat(),
         "weight_kg": weight_kg
     }).execute()
 
 
 def get_weight_history() -> pd.DataFrame:
-    res = supabase.table("weights").select("weight_date, weight_kg").order("weight_date", asc=True).execute()
-    df = pd.DataFrame(res.data)
+    res = supabase.from_("weights").select("weight_date, weight_kg").order("weight_date", desc=False).execute()
+    df = pd.DataFrame(res.data or [])
     if not df.empty:
         df["weight_date"] = pd.to_datetime(df["weight_date"]).dt.date
     return df
@@ -192,39 +193,25 @@ def fetch_openfoodfacts(barcode: str) -> Optional[ProductInfo]:
 
 
 # ---------------------- BARKOD SKENIRANJE ----------------------
-from PIL import Image, ImageEnhance
-
-from PIL import Image, ImageEnhance
-from io import BytesIO
-
 def decode_barcode_from_image(image_bytes: bytes) -> Optional[str]:
-    """
-    Pokušava prepoznati barkod iz slike s više koraka (kontrast, rotacija, resize).
-    Vraća EAN/UPC kod kao string ili None ako ne uspije.
-    """
+    """Pokušava prepoznati barkod iz slike (s pojačanim kontrastom i rotacijama)."""
     if zbar_decode is None:
         return None
-
     try:
-        # Učitaj i pripremi sliku
         base_img = Image.open(BytesIO(image_bytes)).convert("L")  # grayscale
-
-        # Generiraj varijante slike (povećana rezolucija, pojačan kontrast)
         variants = []
         enhancer = ImageEnhance.Contrast(base_img)
         for contrast_factor in [1.5, 2.0, 2.5]:
             img = enhancer.enhance(contrast_factor)
-            img = img.resize((img.width * 2, img.height * 2))  # povećaj rezoluciju
+            img = img.resize((img.width * 2, img.height * 2))
             variants.append(img)
-
-        # Pokušaj dekodirati svaku varijantu i svaku rotaciju
         for img in variants:
             for angle in [0, 90, 180, 270]:
                 rotated = img.rotate(angle, expand=True)
                 results = zbar_decode(rotated)
                 if results:
                     code = results[0].data.decode("utf-8")
-                    if code.isdigit():  # dodatna provjera da je stvaran EAN/UPC
+                    if code.isdigit():
                         return code
         return None
     except Exception as e:
