@@ -124,6 +124,58 @@ div[role="tablist"] {
     background: transparent !important;
     box-shadow: none !important;
 }
+
+/* -------------------------------
+   Uklanjanje crnih pozadina unutar tabova i kontejnera
+--------------------------------*/
+
+/* Ukloni tamne "kutije" koje Streamlit automatski stavlja oko komponenti */
+[data-testid="stVerticalBlock"],
+[data-testid="stHorizontalBlock"],
+[data-testid="stColumn"],
+[data-testid="stVerticalBlock"] > div,
+[data-testid="stTabs"],
+[data-testid="stTabs"] > div,
+section.main > div {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Ukloni pozadinu koja se javlja između sekcija i input polja */
+div.block-container {
+    background: transparent !important;
+}
+
+/* Ukloni shadow i border oko input fieldova (opcionalno ako želiš flat stil) */
+.stTextInput > div > div > input,
+.stDateInput > div > div > input {
+    background-color: #1e1f23 !important;  /* zadrži tvoj tamni ton polja */
+    border: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+}
+
+/* Ukloni border između tabova i sekcija */
+div[role="tablist"] {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Ukloni marginu koja stvara "crni pojas" ispod tabova */
+section.main div[data-testid="stTabs"] {
+    margin-bottom: 0 !important;
+    background: transparent !important;
+}
+
+/* Za svaki slučaj – globalno sve unutarnje tamne divove učini transparentnima */
+div[style*="background-color: rgb(33"],
+div[style*="background-color: rgb(26"],
+div[style*="background-color: rgb(38"],
+div[style*="background-color: rgba("] {
+    background: transparent !important;
+    box-shadow: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
