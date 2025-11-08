@@ -11,6 +11,7 @@ from io import BytesIO
 from PIL import Image, ImageEnhance
 from supabase import create_client, Client
 from dotenv import load_dotenv
+import streamlit as st
 
 # Barkod dekodiranje
 try:
@@ -19,11 +20,27 @@ except Exception:
     zbar_decode = None
 
 # ---------------------- KONFIGURACIJA SUPABASE ----------------------
-load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+load_dotenv()  # koristi se samo lokalno
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+if "SUPABASE_URL" in st.secrets:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+else:
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("❌ SUPABASE_URL ili SUPABASE_KEY nisu postavljeni (provjeri .env ili Streamlit Secrets).")
+
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    # test konekcije
+    test = supabase.table("profile").select("*").limit(1).execute()
+    print("✅ Supabase konekcija uspješna.")
+except Exception as e:
+    print("⚠️ Greška pri spajanju na Supabase:", e)
+    supabase = None
+
 
 # ---------------------- KONSTANTE ----------------------
 NUTRI_KEYS = [
@@ -49,6 +66,10 @@ class ProductInfo:
 
 # ---------------------- PROFIL ----------------------
 def read_profile() -> Dict:
+    if supabase is None:
+        return {"name": "Offline", "target_kcal": 2000, "target_protein": 100,
+                "target_carbs": 250, "target_fat": 70}
+
     res = supabase.from_("profile").select("*").execute()
     if not res.data:
         supabase.from_("profile").insert({
@@ -64,6 +85,9 @@ def read_profile() -> Dict:
 
 
 def update_profile(data: Dict):
+    if supabase is None:
+        print("⚠️ Supabase nije dostupan, promjene profila nisu spremljene.")
+        return
     profiles = supabase.from_("profile").select("id").execute()
     if not profiles.data:
         return
@@ -75,6 +99,10 @@ def update_profile(data: Dict):
 def add_entry(item_name: str, qty_g: float, nutr: Dict[str, float],
               barcode: Optional[str] = None, raw_json: Optional[Dict] = None,
               when: Optional[date] = None):
+    if supabase is None:
+        print("⚠️ Supabase nije dostupan, unos nije spremljen.")
+        return
+
     if when is None:
         when = date.today()
     factor = qty_g / 100.0 if qty_g else 1.0
@@ -103,6 +131,8 @@ def add_entry(item_name: str, qty_g: float, nutr: Dict[str, float],
 
 
 def list_entries(for_date: Optional[date] = None) -> pd.DataFrame:
+    if supabase is None:
+        return pd.DataFrame()
     query = supabase.from_("entries").select("*").order("created_at", desc=True)
     if for_date:
         query = query.eq("entry_date", for_date.isoformat())
@@ -114,10 +144,15 @@ def list_entries(for_date: Optional[date] = None) -> pd.DataFrame:
 
 
 def delete_entry(entry_id: str):
+    if supabase is None:
+        return
     supabase.from_("entries").delete().eq("id", entry_id).execute()
 
 
 def daily_totals(for_date: Optional[date] = None) -> Dict[str, float]:
+    if supabase is None:
+        return {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "sugars": 0, "fiber": 0, "salt": 0}
+
     if for_date is None:
         for_date = date.today()
     res = supabase.from_("entries") \
@@ -130,6 +165,9 @@ def daily_totals(for_date: Optional[date] = None) -> Dict[str, float]:
 
 
 def range_stats(start: date, end: date) -> pd.DataFrame:
+    if supabase is None:
+        return pd.DataFrame()
+
     res = supabase.from_("entries") \
         .select("entry_date, kcal, protein, carbs, fat, sugars, fiber, salt") \
         .gte("entry_date", start.isoformat()) \
@@ -144,6 +182,9 @@ def range_stats(start: date, end: date) -> pd.DataFrame:
 
 # ---------------------- WEIGHT TRACKING ----------------------
 def add_weight_entry(weight_kg: float, when: Optional[date] = None):
+    if supabase is None:
+        print("⚠️ Supabase nije dostupan, težina nije spremljena.")
+        return
     if when is None:
         when = date.today()
     supabase.from_("weights").insert({
@@ -153,11 +194,17 @@ def add_weight_entry(weight_kg: float, when: Optional[date] = None):
 
 
 def get_weight_history() -> pd.DataFrame:
-    res = supabase.from_("weights").select("weight_date, weight_kg").order("weight_date", desc=False).execute()
-    df = pd.DataFrame(res.data or [])
-    if not df.empty:
-        df["weight_date"] = pd.to_datetime(df["weight_date"]).dt.date
-    return df
+    if supabase is None:
+        return pd.DataFrame(columns=["weight_date", "weight_kg"])
+    try:
+        res = supabase.from_("weights").select("weight_date, weight_kg").order("weight_date", desc=False).execute()
+        df = pd.DataFrame(res.data or [])
+        if not df.empty:
+            df["weight_date"] = pd.to_datetime(df["weight_date"]).dt.date
+        return df
+    except Exception as e:
+        print("Greška u get_weight_history:", e)
+        return pd.DataFrame(columns=["weight_date", "weight_kg"])
 
 
 # ---------------------- API: OpenFoodFacts ----------------------
