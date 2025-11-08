@@ -250,7 +250,7 @@ def decode_barcode_from_image(image_bytes: bytes) -> Optional[str]:
         enhancer = ImageEnhance.Contrast(base_img)
         for contrast_factor in [1.5, 2.0, 2.5]:
             img = enhancer.enhance(contrast_factor)
-            img = img.resize((img.width * 2, img.height * 2))
+            img = img.resize((img.width * 3, img.height * 3))
             variants.append(img)
         for img in variants:
             for angle in [0, 90, 180, 270]:

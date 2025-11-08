@@ -12,6 +12,35 @@ from funkcionalnosti import (
     fetch_openfoodfacts, decode_barcode_from_image
 )
 
+st.markdown("""
+<style>
+/* ---------- MOBILNI PRIKAZ: Fullscreen kamera ---------- */
+@media (max-width: 768px) {
+    /* Povećaj veličinu kamera inputa */
+    [data-testid="stCameraInput"] video,
+    [data-testid="stCameraInput"] canvas {
+        width: 95vw !important;
+        height: 75vh !important;
+        object-fit: cover !important;
+        border-radius: 16px !important;
+    }
+
+    /* Ukloni margine i centriraj kameru */
+    [data-testid="stCameraInput"] {
+        margin: 0 auto !important;
+        padding: 0 !important;
+        display: flex !important;
+        justify-content: center !important;
+    }
+
+    /* Pozadina iza kamere tamnija radi kontrasta */
+    .camera-overlay {
+        background: rgba(0, 0, 0, 0.97) !important;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ---------------------------------------------------------------------
 st.set_page_config(page_title="CaloriesPal", page_icon="🥗", layout="wide")
 
