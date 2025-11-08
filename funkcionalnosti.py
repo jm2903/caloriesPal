@@ -192,15 +192,41 @@ def fetch_openfoodfacts(barcode: str) -> Optional[ProductInfo]:
 
 
 # ---------------------- BARKOD SKENIRANJE ----------------------
+from PIL import Image, ImageEnhance
+
+from PIL import Image, ImageEnhance
+from io import BytesIO
+
 def decode_barcode_from_image(image_bytes: bytes) -> Optional[str]:
-    """Vrati EAN/UPC string iz slike; None ako ne pronađe ili ako pyzbar nije dostupan."""
+    """
+    Pokušava prepoznati barkod iz slike s više koraka (kontrast, rotacija, resize).
+    Vraća EAN/UPC kod kao string ili None ako ne uspije.
+    """
     if zbar_decode is None:
         return None
+
     try:
-        img = Image.open(BytesIO(image_bytes)).convert("RGB")
-        results = zbar_decode(img)
-        if not results:
-            return None
-        return results[0].data.decode("utf-8")
-    except Exception:
+        # Učitaj i pripremi sliku
+        base_img = Image.open(BytesIO(image_bytes)).convert("L")  # grayscale
+
+        # Generiraj varijante slike (povećana rezolucija, pojačan kontrast)
+        variants = []
+        enhancer = ImageEnhance.Contrast(base_img)
+        for contrast_factor in [1.5, 2.0, 2.5]:
+            img = enhancer.enhance(contrast_factor)
+            img = img.resize((img.width * 2, img.height * 2))  # povećaj rezoluciju
+            variants.append(img)
+
+        # Pokušaj dekodirati svaku varijantu i svaku rotaciju
+        for img in variants:
+            for angle in [0, 90, 180, 270]:
+                rotated = img.rotate(angle, expand=True)
+                results = zbar_decode(rotated)
+                if results:
+                    code = results[0].data.decode("utf-8")
+                    if code.isdigit():  # dodatna provjera da je stvaran EAN/UPC
+                        return code
+        return None
+    except Exception as e:
+        print("Greška pri dekodiranju barkoda:", e)
         return None
